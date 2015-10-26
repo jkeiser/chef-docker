@@ -19,7 +19,7 @@ module DockerCookbook
     # docker_installation_script
     property :repo, %w(main test experimental)
     property :script_url, String
-    
+
     # docker_installation_package
     property :package_version, String
     property :version, String
@@ -37,7 +37,7 @@ module DockerCookbook
         end
       end
     end
-    
+
     #########
     # Actions
     #########
@@ -45,16 +45,21 @@ module DockerCookbook
     action :create do
       case install_method
       when 'auto'
-        docker_installation(new_resource.instance)
+        installation = docker_installation(name)
       when 'binary'
-        docker_installation_binary(new_resource.instance)
+        installation = docker_installation_binary(name)
       when 'script'
-        docker_installation_script(new_resource.instance)
+        installation = docker_installation_script(name)
       when 'package'
-        docker_installation_package(new_resource.instance)
+        installation = docker_installation_package(name)
       when 'none'
         Chef::Log.info('Skipping Docker installation. Assuming it was handled previously.')
+        return
       end
+
+      installation.action = :create
+      installation.notifies :restart, new_resource
+      copy_properties_to(installation)
     end
 
     action :delete do
