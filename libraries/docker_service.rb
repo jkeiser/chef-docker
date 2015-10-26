@@ -42,28 +42,33 @@ module DockerCookbook
     # Actions
     #########
 
-    action :create do
+    def installation(&block)
       case install_method
       when 'auto'
-        installation = docker_installation(name)
+        installation = docker_installation(name, &block)
       when 'binary'
-        installation = docker_installation_binary(name)
+        installation = docker_installation_binary(name, &block)
       when 'script'
-        installation = docker_installation_script(name)
+        installation = docker_installation_script(name, &block)
       when 'package'
-        installation = docker_installation_package(name)
+        installation = docker_installation_package(name, &block)
       when 'none'
         Chef::Log.info('Skipping Docker installation. Assuming it was handled previously.')
         return
       end
-
-      installation.action = :create
-      installation.notifies :restart, new_resource
       copy_properties_to(installation)
+      installation
+    end
+
+    action :create do
+      installation do
+        action :create
+        notifies :restart, new_resource
+      end
     end
 
     action :delete do
-      docker_installation 'default' do
+      installation do
         action :delete
       end
     end
