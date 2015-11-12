@@ -60,9 +60,9 @@ class Chef
       property :log_driver, %w( json-file syslog journald gelf fluentd none ), default: 'json-file'
       property :log_opts, [Hash, nil], coerce: proc { |v| coerce_log_opts(v) }
       property :mac_address, String, default: ''
-      property :memory, Fixnum, default: 0
+      property :memory, [Fixnum, nil]
       property :memory_swap, Fixnum, default: -1
-      property :network_disabled, Boolean, default: false
+      property :network_disabled, [Boolean,nil]
       property :network_mode, [String, nil], default: lazy { default_network_mode }
       property :open_stdin, Boolean, default: false
       property :outfile, [String, nil], default: nil
@@ -166,6 +166,9 @@ class Chef
         if network_mode == 'host' && property_is_set?(:hostname)
           fail Chef::Exceptions::ValidationFailed, "Cannot specify hostname on #{container_name}, because network_mode is host."
         end
+        # restart_policy must be "no" if autoremove is true
+        # autoremove must be false if restart_policy is not "no"
+
       end
 
       action :create do
@@ -175,55 +178,64 @@ class Chef
           action_delete
 
           with_retries do
-            Docker::Container.create(
-              {
-                'name'            => container_name,
-                'Image'           => "#{repo}:#{tag}",
-                'Labels'          => labels,
-                'Cmd'             => to_shellwords(command),
-                'AttachStderr'    => attach_stderr,
-                'AttachStdin'     => attach_stdin,
-                'AttachStdout'    => attach_stdout,
-                'Domainname'      => domain_name,
-                'Entrypoint'      => to_shellwords(entrypoint),
-                'Env'             => env,
-                'ExposedPorts'    => exposed_ports,
-                'Hostname'        => hostname,
-                'MacAddress'      => mac_address,
-                'NetworkDisabled' => network_disabled,
-                'OpenStdin'       => open_stdin,
-                'StdinOnce'       => stdin_once,
-                'Tty'             => tty,
-                'User'            => user,
-                'Volumes'         => volumes,
-                'WorkingDir'      => working_dir,
-                'HostConfig'      => {
-                  'Binds'           => binds,
-                  'CapAdd'          => cap_add,
-                  'CapDrop'         => cap_drop,
-                  'CgroupParent'    => cgroup_parent,
-                  'CpuShares'       => cpu_shares,
-                  'CpusetCpus'      => cpuset_cpus,
-                  'Devices'         => devices,
-                  'Dns'             => dns,
-                  'DnsSearch'       => dns_search,
-                  'ExtraHosts'      => extra_hosts,
-                  'Links'           => links,
-                  'LogConfig'       => log_config,
-                  'Memory'          => memory,
-                  'MemorySwap'      => memory_swap,
-                  'NetworkMode'     => network_mode,
-                  'Privileged'      => privileged,
-                  'PortBindings'    => port_bindings,
-                  'PublishAllPorts' => publish_all_ports,
-                  'RestartPolicy'   => {
-                    'Name'              => restart_policy,
-                    'MaximumRetryCount' => restart_maximum_retry_count
-                  },
-                  'Ulimits'         => ulimits_to_hash,
-                  'VolumesFrom'     => volumes_from
-                }
-              }, connection)
+            payload = {
+              'name'            => container_name,
+              'Image'           => "#{repo}:#{tag}",
+              'Labels'          => labels,
+              'Cmd'             => to_shellwords(command),
+              'AttachStderr'    => attach_stderr,
+              'AttachStdin'     => attach_stdin,
+              'AttachStdout'    => attach_stdout,
+              'Domainname'      => domain_name,
+              'Entrypoint'      => to_shellwords(entrypoint),
+              'Env'             => env,
+              'ExposedPorts'    => exposed_ports,
+              'Hostname'        => hostname,
+              'MacAddress'      => mac_address,
+              'NetworkDisabled' => network_disabled,
+              'OpenStdin'       => open_stdin,
+              'StdinOnce'       => stdin_once,
+              'Tty'             => tty,
+              'User'            => user,
+              'Volumes'         => volumes,
+              'WorkingDir'      => working_dir,
+              'HostConfig'      => {
+                'Binds'           => binds,
+                'CapAdd'          => cap_add,
+                'CapDrop'         => cap_drop,
+                'CgroupParent'    => cgroup_parent,
+                'CpuShares'       => cpu_shares,
+                'CpusetCpus'      => cpuset_cpus,
+                'Devices'         => devices,
+                'Dns'             => dns,
+                'DnsSearch'       => dns_search,
+                'ExtraHosts'      => extra_hosts,
+                'Links'           => links,
+                'LogConfig'       => log_config,
+                'Memory'          => memory
+                'MemorySwap'      => memory_swap,
+                'NetworkMode'     => network_mode,
+                'Privileged'      => privileged,
+                'PortBindings'    => port_bindings,
+                'PublishAllPorts' => publish_all_ports,
+                'RestartPolicy'   => {
+                  'Name'              => restart_policy,
+                  'MaximumRetryCount' => restart_maximum_retry_count
+                },
+                'Ulimits'         => ulimits_to_hash,
+                'VolumesFrom'     => volumes_from
+              }
+            }
+            payload['HostConfig']['RestartPolicy'].each do |key, value|
+              payload['HostConfig']['RestartPolicy'].delete(key) if value.nil?
+            end
+            payload['HostConfig'].each do |key, value|
+              payload['HostConfig'].delete(key) if value.nil?
+            end
+            payload.each do |key, value|
+              payload.delete(key) if value.nil?
+            end
+            Docker::Container.create(payload, connection)
           end
         end
       end
